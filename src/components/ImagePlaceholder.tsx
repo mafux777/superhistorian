@@ -1,12 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { useHistorianStore } from "@/lib/store";
 import { motion } from "framer-motion";
+import ImageLightbox from "./ImageLightbox";
 
 interface ImagePlaceholderProps {
   contextText: string;
   cacheKey: string;
   compact?: boolean;
+  title?: string;
+  timeRange?: { start: string; end: string };
+  geographicScope?: string;
+  summary?: string;
 }
 
 // Fire-and-forget image generation that writes results to the store
@@ -47,20 +53,34 @@ export function generateImage(cacheKey: string, contextText: string) {
     });
 }
 
-export default function ImagePlaceholder({ contextText, cacheKey, compact }: ImagePlaceholderProps) {
+export default function ImagePlaceholder({ contextText, cacheKey, compact, title, timeRange, geographicScope, summary }: ImagePlaceholderProps) {
   const existingImage = useHistorianStore((s) => s.generatedImages[cacheKey]);
   const isGenerating = useHistorianStore((s) => s.generatingImages[cacheKey]);
   const error = useHistorianStore((s) => s.imageErrors[cacheKey]);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (existingImage) {
     return (
-      <div className={`rounded-xl overflow-hidden border border-sepia/20 shadow-sm ${compact ? "my-4" : "my-3"}`}>
-        <img
-          src={existingImage}
-          alt={`Historical illustration: ${contextText.slice(0, 80)}...`}
-          className="w-full h-auto"
+      <>
+        <div
+          className={`rounded-xl overflow-hidden border border-sepia/20 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${compact ? "my-4" : "my-3"}`}
+          onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
+        >
+          <img
+            src={existingImage}
+            alt={title || `Historical illustration: ${contextText.slice(0, 80)}...`}
+            className="w-full h-auto"
+          />
+        </div>
+        <ImageLightbox
+          imageUrl={lightboxOpen ? existingImage : null}
+          title={title}
+          timeRange={timeRange}
+          geographicScope={geographicScope}
+          summary={summary}
+          onClose={() => setLightboxOpen(false)}
         />
-      </div>
+      </>
     );
   }
 

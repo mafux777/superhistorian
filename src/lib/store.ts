@@ -12,15 +12,22 @@ interface HistorianState {
   currentNode: HistoryNode;
   // Loading state
   isLoading: boolean;
-  // Essay state
-  essay: string | null;
-  isEssayLoading: boolean;
+  // Essay state (per-node)
+  essays: Record<string, string>;       // nodeId → essay text
+  essayLoading: Record<string, boolean>; // nodeId → loading
   // Search state
   searchNode: HistoryNode | null;
   // Model selection
   selectedModel: string;
   selectedImageModel: string;
   selectedLanguage: string;
+  // Turbo mode
+  turboMode: boolean;
+  lastSplitAxis: "time" | "geography";
+  // Prefetched splits: nodeId → { time: HistoryNode[], geo: HistoryNode[] }
+  prefetchedSplits: Record<string, { time?: HistoryNode[]; geo?: HistoryNode[] }>;
+  prefetchingNodes: Record<string, { time?: boolean; geo?: boolean; startedAt?: number }>;
+  cancelledNodes: Record<string, boolean>;
   // Debug log
   debugLog: DebugEntry[];
   showDebug: boolean;
@@ -35,15 +42,21 @@ interface HistorianState {
   navigateToPath: (path: string[]) => void;
   goBack: () => void;
   setLoading: (loading: boolean) => void;
-  setEssay: (essay: string | null) => void;
-  setEssayLoading: (loading: boolean) => void;
+  setEssay: (nodeId: string, essay: string | null) => void;
+  setEssayLoading: (nodeId: string, loading: boolean) => void;
   setSearchNode: (node: HistoryNode | null) => void;
+  setTree: (node: HistoryNode) => void;
   setSelectedModel: (model: string) => void;
   setSelectedImageModel: (model: string) => void;
   setSelectedLanguage: (lang: string) => void;
   setGeneratedImage: (key: string, url: string) => void;
   setGeneratingImage: (key: string, generating: boolean) => void;
   setImageError: (key: string, error: string | null) => void;
+  toggleTurbo: () => void;
+  setLastSplitAxis: (axis: "time" | "geography") => void;
+  setPrefetchedSplit: (nodeId: string, axis: "time" | "geo", nodes: HistoryNode[]) => void;
+  setPrefetching: (nodeId: string, axis: "time" | "geo", loading: boolean) => void;
+  setCancelled: (nodeIds: string[]) => void;
   addDebugEntry: (entry: Omit<DebugEntry, "id" | "timestamp">) => void;
   toggleDebug: () => void;
   findNode: (nodeId: string) => HistoryNode | null;
@@ -94,12 +107,17 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
   currentPath: ["root"],
   currentNode: ROOT_NODE,
   isLoading: false,
-  essay: null,
-  isEssayLoading: false,
+  essays: {},
+  essayLoading: {},
   searchNode: null,
   selectedModel: "openai/gpt-5-nano",
   selectedImageModel: "openai/gpt-5-image-mini",
   selectedLanguage: "English",
+  turboMode: false,
+  lastSplitAxis: "time" as "time" | "geography",
+  prefetchedSplits: {},
+  prefetchingNodes: {},
+  cancelledNodes: {},
   debugLog: [],
   showDebug: false,
   generatedImages: {},
@@ -124,7 +142,7 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
     if (!node) return;
     const path = findPathToNode(state.tree, nodeId);
     if (!path) return;
-    set({ currentNode: node, currentPath: path, essay: null });
+    set({ currentNode: node, currentPath: path });
   },
 
   navigateToPath: (path) => {
@@ -132,7 +150,7 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
     const nodeId = path[path.length - 1];
     const node = findNodeInTree(state.tree, nodeId);
     if (!node) return;
-    set({ currentNode: node, currentPath: path, essay: null });
+    set({ currentNode: node, currentPath: path });
   },
 
   goBack: () => {
@@ -142,14 +160,21 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
     const parentId = parentPath[parentPath.length - 1];
     const parent = findNodeInTree(state.tree, parentId);
     if (parent) {
-      set({ currentNode: parent, currentPath: parentPath, essay: null });
+      set({ currentNode: parent, currentPath: parentPath });
     }
   },
 
   setLoading: (isLoading) => set({ isLoading }),
-  setEssay: (essay) => set({ essay }),
-  setEssayLoading: (isEssayLoading) => set({ isEssayLoading }),
+  setEssay: (nodeId, essay) =>
+    set((state) => ({
+      essays: { ...state.essays, [nodeId]: essay || "" },
+    })),
+  setEssayLoading: (nodeId, loading) =>
+    set((state) => ({
+      essayLoading: { ...state.essayLoading, [nodeId]: loading },
+    })),
   setSearchNode: (searchNode) => set({ searchNode }),
+  setTree: (node) => set({ tree: node, currentNode: node, currentPath: [node.id] }),
   setSelectedModel: (selectedModel) => set({ selectedModel }),
   setSelectedImageModel: (selectedImageModel) => set({ selectedImageModel }),
   setSelectedLanguage: (selectedLanguage) => set({ selectedLanguage }),
@@ -169,6 +194,39 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
       imageErrors: { ...state.imageErrors, [key]: error || (undefined as unknown as string) },
       generatingImages: { ...state.generatingImages, [key]: false },
     })),
+  toggleTurbo: () => set((state) => ({ turboMode: !state.turboMode })),
+  setLastSplitAxis: (lastSplitAxis) => set({ lastSplitAxis }),
+  setPrefetchedSplit: (nodeId, axis, nodes) =>
+    set((state) => ({
+      prefetchedSplits: {
+        ...state.prefetchedSplits,
+        [nodeId]: { ...state.prefetchedSplits[nodeId], [axis]: nodes },
+      },
+      prefetchingNodes: {
+        ...state.prefetchingNodes,
+        [nodeId]: { ...state.prefetchingNodes[nodeId], [axis]: false },
+      },
+    })),
+  setPrefetching: (nodeId, axis, loading) =>
+    set((state) => {
+      const existing = state.prefetchingNodes[nodeId];
+      return {
+        prefetchingNodes: {
+          ...state.prefetchingNodes,
+          [nodeId]: {
+            ...existing,
+            [axis]: loading,
+            startedAt: loading && !existing?.startedAt ? Date.now() : existing?.startedAt,
+          },
+        },
+      };
+    }),
+  setCancelled: (nodeIds) =>
+    set((state) => {
+      const updated = { ...state.cancelledNodes };
+      for (const id of nodeIds) updated[id] = true;
+      return { cancelledNodes: updated };
+    }),
   addDebugEntry: (entry) =>
     set((state) => ({
       debugLog: [

@@ -8,7 +8,7 @@ import { v4 } from "@/lib/uuid";
 export default function SearchBar() {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const { setChildren, navigateTo, tree, addDebugEntry } = useHistorianStore();
+  const { setTree, addDebugEntry } = useHistorianStore();
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,23 +28,21 @@ export default function SearchBar() {
         addDebugEntry({ action: "jump-to-topic", model: data._debug.model, prompt: data._debug.prompt, response: data });
       }
 
-      // Create a new node and add it as a child of root
-      const newNode: HistoryNode = {
+      // Create a new root node from the search result
+      const newRoot: HistoryNode = {
         id: v4(),
         title: data.title,
         summary: data.summary,
         timeRange: { start: data.start, end: data.end },
         geographicScope: data.geographicScope,
-        parentId: "root",
+        parentId: null,
         children: [],
         splitAxis: null,
-        depth: 1,
+        depth: 0,
       };
 
-      // Add to root's children
-      const existingChildren = tree.children;
-      setChildren("root", [...existingChildren, newNode], tree.splitAxis || "time");
-      navigateTo(newNode.id);
+      // Replace the tree with this new root
+      setTree(newRoot);
       setQuery("");
     } catch (err) {
       console.error("Search failed:", err);

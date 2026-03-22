@@ -15,9 +15,11 @@ interface NodeGridProps {
   isLoading: boolean;
   splitAxis: "time" | "geography" | null;
   selectedChildId?: string | null;
+  horizontal?: boolean;
+  label?: string;
 }
 
-export default function NodeGrid({ nodes, onSplitTime, onSplitGeo, onDrillDown, onEssay, isLoading, splitAxis, selectedChildId }: NodeGridProps) {
+export default function NodeGrid({ nodes, onSplitTime, onSplitGeo, onDrillDown, onEssay, isLoading, splitAxis, selectedChildId, horizontal, label }: NodeGridProps) {
   const generatedImages = useHistorianStore((s) => s.generatedImages);
   const generatingImages = useHistorianStore((s) => s.generatingImages);
 
@@ -46,9 +48,9 @@ export default function NodeGrid({ nodes, onSplitTime, onSplitGeo, onDrillDown, 
           {splitAxis === "geography" ? "🗺️" : "⏳"}
         </span>
         <h2 className="font-display text-lg text-ink/70">
-          {splitAxis === "geography"
+          {label || (splitAxis === "geography"
             ? `${nodes.length} Regions to Explore`
-            : `${nodes.length} Periods in Sequence`}
+            : `${nodes.length} Periods in Sequence`)}
         </h2>
         <div className="flex-1 h-px bg-sepia/20" />
         {!allHaveImages && (
@@ -69,20 +71,24 @@ export default function NodeGrid({ nodes, onSplitTime, onSplitGeo, onDrillDown, 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
+          className={horizontal
+            ? "flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory"
+            : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
+          }
         >
           {nodes.map((node, i) => (
-            <NodeCard
-              key={node.id}
-              node={node}
-              index={i}
-              onSplitTime={onSplitTime}
-              onSplitGeo={onSplitGeo}
-              onDrillDown={onDrillDown}
-              onEssay={onEssay}
-              isLoading={isLoading}
-              isSelected={node.id === selectedChildId}
-            />
+            <div key={node.id} className={horizontal ? "min-w-[280px] max-w-[320px] shrink-0 snap-start" : ""}>
+              <NodeCard
+                node={node}
+                index={i}
+                onSplitTime={onSplitTime}
+                onSplitGeo={onSplitGeo}
+                onDrillDown={onDrillDown}
+                onEssay={onEssay}
+                isLoading={isLoading}
+                isSelected={node.id === selectedChildId}
+              />
+            </div>
           ))}
         </motion.div>
       </AnimatePresence>

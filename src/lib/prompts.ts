@@ -14,6 +14,7 @@ export function buildSplitByTimePrompt(node: HistoryNode, language: string = "En
 Period: ${node.title}
 Time range: ${node.timeRange.start} to ${node.timeRange.end}
 Geographic scope: ${node.geographicScope}
+Context: ${node.summary}
 
 Respond in JSON: { "phases": [{ "title", "start", "end", "summary" }] }${langInstruction(language)}`;
 }
@@ -26,6 +27,7 @@ export function buildSplitByGeoPrompt(node: HistoryNode, language: string = "Eng
 Period: ${node.title}
 Time range: ${node.timeRange.start} to ${node.timeRange.end}
 Current scope: ${node.geographicScope}
+Context: ${node.summary}
 
 Respond in JSON: { "regions": [{ "regionName", "summary" }] }${langInstruction(language)}`;
 }
