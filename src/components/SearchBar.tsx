@@ -8,7 +8,7 @@ import { v4 } from "@/lib/uuid";
 export default function SearchBar() {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const { setChildren, navigateTo, tree } = useHistorianStore();
+  const { setChildren, navigateTo, tree, addDebugEntry } = useHistorianStore();
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,10 +19,14 @@ export default function SearchBar() {
       const res = await fetch("/api/explore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "jump-to-topic", query: query.trim() }),
+        body: JSON.stringify({ action: "jump-to-topic", query: query.trim(), model: useHistorianStore.getState().selectedModel, language: useHistorianStore.getState().selectedLanguage }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+
+      if (data._debug) {
+        addDebugEntry({ action: "jump-to-topic", model: data._debug.model, prompt: data._debug.prompt, response: data });
+      }
 
       // Create a new node and add it as a child of root
       const newNode: HistoryNode = {

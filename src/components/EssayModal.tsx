@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useHistorianStore } from "@/lib/store";
+import ImagePlaceholder from "./ImagePlaceholder";
 
 export default function EssayModal() {
   const { essay, isEssayLoading, setEssay, currentNode } = useHistorianStore();
@@ -73,9 +74,29 @@ export default function EssayModal() {
               </div>
             ) : (
               <div className="prose prose-stone max-w-none">
-                <div className="font-serif text-ink/90 leading-relaxed text-[15px] whitespace-pre-line first-letter:text-5xl first-letter:font-display first-letter:text-sepia first-letter:float-left first-letter:mr-2 first-letter:mt-1">
-                  {essay}
-                </div>
+                {(() => {
+                  const paragraphs = (essay || "").split(/\n\n+/).filter((p) => p.trim());
+                  return paragraphs.map((para, i) => (
+                    <div key={i}>
+                      <p
+                        className={`font-serif text-ink/90 leading-relaxed text-[15px] ${
+                          i === 0
+                            ? "first-letter:text-5xl first-letter:font-display first-letter:text-sepia first-letter:float-left first-letter:mr-2 first-letter:mt-1"
+                            : ""
+                        }`}
+                      >
+                        {para}
+                      </p>
+                      {i < paragraphs.length - 1 && (
+                        <ImagePlaceholder
+                          contextText={`${currentNode.title} (${currentNode.timeRange.start}–${currentNode.timeRange.end}, ${currentNode.geographicScope}). Context from the essay: ${para}`}
+                          cacheKey={`essay-${currentNode.id}-p${i}`}
+                          compact
+                        />
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
             )}
 

@@ -2,6 +2,7 @@
 
 import { HistoryNode } from "@/lib/types";
 import { motion } from "framer-motion";
+import ImagePlaceholder from "./ImagePlaceholder";
 
 interface NodeCardProps {
   node: HistoryNode;
@@ -11,6 +12,7 @@ interface NodeCardProps {
   onDrillDown: (node: HistoryNode) => void;
   onEssay: (node: HistoryNode) => void;
   isLoading: boolean;
+  isSelected?: boolean;
 }
 
 const CARD_COLORS = [
@@ -21,10 +23,20 @@ const CARD_COLORS = [
   "from-rose-50 to-pink-50 border-rose-200 hover:border-rose-400",
 ];
 
+const SELECTED_COLORS = [
+  "from-amber-100 to-orange-100 border-amber-500",
+  "from-emerald-100 to-teal-100 border-emerald-500",
+  "from-sky-100 to-blue-100 border-sky-500",
+  "from-violet-100 to-purple-100 border-violet-500",
+  "from-rose-100 to-pink-100 border-rose-500",
+];
+
 const DEPTH_ICONS = ["🌍", "🏛️", "⚔️", "📜", "🔬", "🎭", "👑", "🗺️", "📖", "🏰", "⭐", "🔥", "💎", "🌿", "🎨"];
 
-export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrillDown, onEssay, isLoading }: NodeCardProps) {
-  const colorClass = CARD_COLORS[index % CARD_COLORS.length];
+export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrillDown, onEssay, isLoading, isSelected }: NodeCardProps) {
+  const colorClass = isSelected
+    ? SELECTED_COLORS[index % SELECTED_COLORS.length]
+    : CARD_COLORS[index % CARD_COLORS.length];
   const icon = DEPTH_ICONS[node.depth % DEPTH_ICONS.length];
   const hasChildren = node.children.length > 0;
 
@@ -34,8 +46,10 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: index * 0.08, type: "spring", stiffness: 200, damping: 20 }}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className={`bg-gradient-to-br ${colorClass} border-2 rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-lg group relative overflow-hidden`}
-      onClick={() => hasChildren ? onDrillDown(node) : undefined}
+      className={`bg-gradient-to-br ${colorClass} border-2 rounded-2xl p-5 flex flex-col gap-3 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-lg group relative overflow-hidden ${
+        isSelected ? "ring-2 ring-ink/20 shadow-md" : ""
+      }`}
+      onClick={() => onDrillDown(node)}
     >
       {/* Depth indicator */}
       <div className="absolute top-2 right-3 text-2xl opacity-20 group-hover:opacity-40 transition-opacity">
@@ -68,6 +82,12 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
       <p className="text-sm text-ink/80 font-serif leading-relaxed line-clamp-4">
         {node.summary}
       </p>
+
+      {/* Image placeholder */}
+      <ImagePlaceholder
+        contextText={`${node.title}. ${node.timeRange.start} to ${node.timeRange.end}, ${node.geographicScope}. ${node.summary}`}
+        cacheKey={`node-${node.id}`}
+      />
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 mt-auto pt-2">

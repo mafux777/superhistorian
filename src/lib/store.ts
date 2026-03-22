@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { HistoryNode } from "./types";
+import { HistoryNode, DebugEntry } from "./types";
 
 interface HistorianState {
   // The entire exploration tree
@@ -17,6 +17,17 @@ interface HistorianState {
   isEssayLoading: boolean;
   // Search state
   searchNode: HistoryNode | null;
+  // Model selection
+  selectedModel: string;
+  selectedImageModel: string;
+  selectedLanguage: string;
+  // Debug log
+  debugLog: DebugEntry[];
+  showDebug: boolean;
+  // Generated images cache & state
+  generatedImages: Record<string, string>; // key → data URL or base64
+  generatingImages: Record<string, boolean>; // key → currently generating
+  imageErrors: Record<string, string>; // key → error message
 
   // Actions
   setChildren: (nodeId: string, children: HistoryNode[], splitAxis: "time" | "geography") => void;
@@ -27,6 +38,14 @@ interface HistorianState {
   setEssay: (essay: string | null) => void;
   setEssayLoading: (loading: boolean) => void;
   setSearchNode: (node: HistoryNode | null) => void;
+  setSelectedModel: (model: string) => void;
+  setSelectedImageModel: (model: string) => void;
+  setSelectedLanguage: (lang: string) => void;
+  setGeneratedImage: (key: string, url: string) => void;
+  setGeneratingImage: (key: string, generating: boolean) => void;
+  setImageError: (key: string, error: string | null) => void;
+  addDebugEntry: (entry: Omit<DebugEntry, "id" | "timestamp">) => void;
+  toggleDebug: () => void;
   findNode: (nodeId: string) => HistoryNode | null;
 }
 
@@ -78,6 +97,14 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
   essay: null,
   isEssayLoading: false,
   searchNode: null,
+  selectedModel: "openai/gpt-5-nano",
+  selectedImageModel: "openai/gpt-5-image-mini",
+  selectedLanguage: "English",
+  debugLog: [],
+  showDebug: false,
+  generatedImages: {},
+  generatingImages: {},
+  imageErrors: {},
 
   setChildren: (nodeId, children, splitAxis) => {
     set((state) => {
@@ -123,6 +150,33 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
   setEssay: (essay) => set({ essay }),
   setEssayLoading: (isEssayLoading) => set({ isEssayLoading }),
   setSearchNode: (searchNode) => set({ searchNode }),
+  setSelectedModel: (selectedModel) => set({ selectedModel }),
+  setSelectedImageModel: (selectedImageModel) => set({ selectedImageModel }),
+  setSelectedLanguage: (selectedLanguage) => set({ selectedLanguage }),
+  setGeneratedImage: (key, url) =>
+    set((state) => ({
+      generatedImages: { ...state.generatedImages, [key]: url },
+      generatingImages: { ...state.generatingImages, [key]: false },
+      imageErrors: { ...state.imageErrors, [key]: undefined as unknown as string },
+    })),
+  setGeneratingImage: (key, generating) =>
+    set((state) => ({
+      generatingImages: { ...state.generatingImages, [key]: generating },
+      ...(generating ? { imageErrors: { ...state.imageErrors, [key]: undefined as unknown as string } } : {}),
+    })),
+  setImageError: (key, error) =>
+    set((state) => ({
+      imageErrors: { ...state.imageErrors, [key]: error || (undefined as unknown as string) },
+      generatingImages: { ...state.generatingImages, [key]: false },
+    })),
+  addDebugEntry: (entry) =>
+    set((state) => ({
+      debugLog: [
+        { ...entry, id: String(Date.now()), timestamp: Date.now() },
+        ...state.debugLog,
+      ].slice(0, 50),
+    })),
+  toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
 
   findNode: (nodeId) => {
     return findNodeInTree(get().tree, nodeId);

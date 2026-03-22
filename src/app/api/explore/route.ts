@@ -6,25 +6,28 @@ export async function POST(req: NextRequest) {
   try {
     const body: ExploreRequest = await req.json();
 
+    const model = body.model;
+    const language = body.language;
+
     switch (body.action) {
       case "split-time": {
         if (!body.node) return NextResponse.json({ error: "Node required" }, { status: 400 });
-        const result = await splitByTime(body.node);
+        const result = await splitByTime(body.node, model, language);
         return NextResponse.json(result);
       }
       case "split-geography": {
         if (!body.node) return NextResponse.json({ error: "Node required" }, { status: 400 });
-        const result = await splitByGeo(body.node);
+        const result = await splitByGeo(body.node, model, language);
         return NextResponse.json(result);
       }
       case "jump-to-topic": {
         if (!body.query) return NextResponse.json({ error: "Query required" }, { status: 400 });
-        const result = await jumpToTopic(body.query);
+        const result = await jumpToTopic(body.query, model, language);
         return NextResponse.json(result);
       }
       case "essay": {
         if (!body.node) return NextResponse.json({ error: "Node required" }, { status: 400 });
-        const result = await generateEssay(body.node);
+        const result = await generateEssay(body.node, model, language);
         return NextResponse.json(result);
       }
       default:
