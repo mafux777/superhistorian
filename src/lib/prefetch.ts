@@ -107,36 +107,43 @@ function prefetchSplit(node: HistoryNode, axis: "time" | "geo") {
 
   const action = axis === "time" ? "split-time" : "split-geography";
   const key = jobKey(node.id, axis);
+  const resolvedModel = store.selectedModel;
+  const debugId = store.startDebugEntry({
+    action: `prefetch-${action}`,
+    model: resolvedModel,
+    prompt: `Prefetch ${axis}: ${node.title}`,
+    nodeTitle: node.title,
+    nodeDepth: node.depth,
+  });
 
   const startTime = Date.now();
+  const CLIENT_TIMEOUT_MS = 95_000; // slightly longer than server's 90s to let server timeout first
 
-  enqueue(key, (signal: AbortSignal) =>
-    fetch("/api/explore", {
+  enqueue(key, (cancelSignal: AbortSignal) => {
+    // Compose cancellation signal with a timeout
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
+    // If the cancellation signal fires, also abort
+    const onCancel = () => controller.abort();
+    cancelSignal.addEventListener("abort", onCancel);
+
+    return fetch("/api/explore", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action,
         node: slimNode(node),
-        model: useHistorianStore.getState().selectedModel,
+        model: resolvedModel,
         language: useHistorianStore.getState().selectedLanguage,
       }),
-      signal,
+      signal: controller.signal,
     })
       .then((res) => res.json())
       .then((data) => {
-        // Don't process if aborted
-        if (signal.aborted) return;
-
+        if (controller.signal.aborted) return;
         if (data.error) throw new Error(data.error);
 
-        if (data._debug) {
-          useHistorianStore.getState().addDebugEntry({
-            action: `prefetch-${action}`,
-            model: data._debug.model,
-            prompt: data._debug.prompt,
-            response: data,
-          });
-        }
+        useHistorianStore.getState().completeDebugEntry(debugId, data);
 
         let children: HistoryNode[];
         if (axis === "time" && data.phases) {
@@ -175,11 +182,25 @@ function prefetchSplit(node: HistoryNode, axis: "time" | "geo") {
         useHistorianStore.getState().setPrefetchedSplit(node.id, axis, children);
       })
       .catch((err) => {
-        if (err instanceof DOMException && err.name === "AbortError") return; // expected
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Could be cancellation or timeout — check which
+          const reason = cancelSignal.aborted ? "Cancelled" : `Timeout: no response within ${CLIENT_TIMEOUT_MS / 1000}s`;
+          useHistorianStore.getState().completeDebugEntry(debugId, {}, reason);
+          if (!cancelSignal.aborted) {
+            useHistorianStore.getState().setPrefetching(node.id, axis, false);
+          }
+          return;
+        }
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
         console.error(`Prefetch ${axis} failed for ${node.title}:`, err);
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, errMsg);
         useHistorianStore.getState().setPrefetching(node.id, axis, false);
       })
-  );
+      .finally(() => {
+        clearTimeout(timer);
+        cancelSignal.removeEventListener("abort", onCancel);
+      });
+  });
 }
 
 export function prefetchForNode(node: HistoryNode) {

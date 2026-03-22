@@ -48,7 +48,10 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
   // Image state
   const existingImage = useHistorianStore((s) => s.generatedImages[`node-${node.id}`]);
   const isGeneratingImage = useHistorianStore((s) => s.generatingImages[`node-${node.id}`]);
+  const existingMap = useHistorianStore((s) => s.generatedImages[`map-${node.id}`]);
+  const isGeneratingMap = useHistorianStore((s) => s.generatingImages[`map-${node.id}`]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [mapLightboxOpen, setMapLightboxOpen] = useState(false);
 
   // Tick for elapsed time
   const [, setTick] = useState(0);
@@ -76,6 +79,7 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
   }
 
   const imageContext = `${node.title}. ${node.timeRange.start} to ${node.timeRange.end}, ${node.geographicScope}. ${node.summary}`;
+  const mapContext = `Historical map showing ${node.geographicScope} during the period ${node.timeRange.start} to ${node.timeRange.end} (${node.title}). Show political boundaries, key cities, trade routes, and territorial control relevant to this era. Cartographic style with muted colors, no modern borders.`;
 
   return (
     <>
@@ -146,18 +150,30 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
           {node.summary}
         </p>
 
-        {/* Image thumbnail (if generated) */}
-        {existingImage && (
-          <div
-            className="rounded-lg overflow-hidden border border-sepia/15 mb-3 cursor-zoom-in"
-            onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
-          >
-            <img src={existingImage} alt={node.title} className="w-full h-auto" />
+        {/* Thumbnails (image + map) */}
+        {(existingImage || existingMap) && (
+          <div className="flex gap-2 mb-3">
+            {existingImage && (
+              <div
+                className="flex-1 rounded-lg overflow-hidden border border-sepia/15 cursor-zoom-in"
+                onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
+              >
+                <img src={existingImage} alt={node.title} className="w-full h-auto" />
+              </div>
+            )}
+            {existingMap && (
+              <div
+                className="flex-1 rounded-lg overflow-hidden border border-sepia/15 cursor-zoom-in"
+                onClick={(e) => { e.stopPropagation(); setMapLightboxOpen(true); }}
+              >
+                <img src={existingMap} alt={`Map: ${node.title}`} className="w-full h-auto" />
+              </div>
+            )}
           </div>
         )}
 
-        {/* 2x2 action button grid */}
-        <div className="grid grid-cols-2 gap-1.5 mt-auto">
+        {/* Action button grid */}
+        <div className="grid grid-cols-3 gap-1.5 mt-auto">
           <button
             onClick={(e) => { e.stopPropagation(); onSplitTime(node); }}
             disabled={isLoading}
@@ -173,21 +189,25 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
             🗺️ Geo
           </button>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              generateImage(`node-${node.id}`, imageContext);
-            }}
+            onClick={(e) => { e.stopPropagation(); onEssay(node); }}
+            disabled={isLoading}
+            className="px-2 py-1.5 bg-sepia text-parchment text-[11px] font-semibold rounded-lg hover:bg-brass transition-colors disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm"
+          >
+            📝 Essay
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); generateImage(`node-${node.id}`, imageContext); }}
             disabled={isLoading || isGeneratingImage || !!existingImage}
             className="px-2 py-1.5 bg-violet-600 text-white text-[11px] font-semibold rounded-lg hover:bg-violet-500 transition-colors disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm"
           >
             {isGeneratingImage ? "🎨 ..." : existingImage ? "🎨 Done" : "🎨 Image"}
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onEssay(node); }}
-            disabled={isLoading}
-            className="px-2 py-1.5 bg-sepia text-parchment text-[11px] font-semibold rounded-lg hover:bg-brass transition-colors disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm"
+            onClick={(e) => { e.stopPropagation(); generateImage(`map-${node.id}`, mapContext); }}
+            disabled={isLoading || isGeneratingMap || !!existingMap}
+            className="px-2 py-1.5 bg-teal-700 text-white text-[11px] font-semibold rounded-lg hover:bg-teal-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm"
           >
-            📝 Essay
+            {isGeneratingMap ? "🗺️ ..." : existingMap ? "🗺️ Done" : "🗺️ Map"}
           </button>
         </div>
       </motion.div>
@@ -200,6 +220,15 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
         geographicScope={node.geographicScope}
         summary={node.summary}
         onClose={() => setLightboxOpen(false)}
+      />
+      {/* Lightbox for map */}
+      <ImageLightbox
+        imageUrl={mapLightboxOpen ? existingMap || null : null}
+        title={`Map: ${node.title}`}
+        timeRange={node.timeRange}
+        geographicScope={node.geographicScope}
+        summary={`Historical map of ${node.geographicScope} during ${node.timeRange.start} to ${node.timeRange.end}`}
+        onClose={() => setMapLightboxOpen(false)}
       />
     </>
   );

@@ -6,3 +6,7 @@ out/
 .env.production
 *.tsbuildinfo
 next-env.d.ts
+
+# Data (SurrealDB + generated images)
+data/
+test-results/

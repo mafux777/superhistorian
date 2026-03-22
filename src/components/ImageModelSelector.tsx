@@ -77,27 +77,46 @@ export default function ImageModelSelector() {
           {error && (
             <div className="p-4 text-center text-sm text-crimson font-serif">{error}</div>
           )}
-          {models.map((model) => (
-            <button
-              key={model.id}
-              onClick={() => {
-                setSelectedImageModel(model.id);
-                setIsOpen(false);
-              }}
-              className={`w-full text-left px-4 py-3 hover:bg-sepia/5 transition-colors border-b border-sepia/5 last:border-0 ${
-                model.id === selectedImageModel ? "bg-sepia/10" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-serif text-sm text-ink font-medium truncate">{model.name}</span>
-                {model.id === selectedImageModel && <span className="text-xs text-navy">✓</span>}
-              </div>
-              <div className="flex items-center gap-3 mt-1 text-[11px] text-sepia/60 font-mono">
-                <span>${parseFloat(model.completionPrice) * 1e6}/M out</span>
-                <span>{new Date(model.created * 1000).toLocaleDateString()}</span>
-              </div>
-            </button>
-          ))}
+          {(() => {
+            const maxPrice = Math.max(...models.map((m) => parseFloat(m.completionPrice) * 1e6), 0.01);
+
+            return models.map((model) => {
+              const outPrice = parseFloat(model.completionPrice) * 1e6;
+              const barWidth = Math.max(2, (outPrice / maxPrice) * 100);
+
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => {
+                    setSelectedImageModel(model.id);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 hover:bg-sepia/5 transition-colors border-b border-sepia/5 last:border-0 ${
+                    model.id === selectedImageModel ? "bg-sepia/10" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-serif text-sm text-ink font-medium truncate">{model.name}</span>
+                    {model.id === selectedImageModel && <span className="text-xs text-navy">✓</span>}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-3 bg-sepia/5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-violet-400 to-pink-400 rounded-full"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-sepia/50 shrink-0 w-16 text-right">
+                      ${outPrice < 1 ? outPrice.toFixed(2) : outPrice.toFixed(1)}/M
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-[10px] text-sepia/40 font-mono">
+                    <span>{new Date(model.created * 1000).toLocaleDateString()}</span>
+                  </div>
+                </button>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

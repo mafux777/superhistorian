@@ -47,6 +47,14 @@ function ExplorationLevel({
   const prefetched = useHistorianStore((s) => s.prefetchedSplits[node.id]);
   const prefetching = useHistorianStore((s) => s.prefetchingNodes[node.id]);
 
+  // Reactive state for the expanded card
+  const essayText = useHistorianStore((s) => s.essays[node.id]);
+  const essayIsLoading = useHistorianStore((s) => s.essayLoading[node.id]);
+  const nodeImage = useHistorianStore((s) => s.generatedImages[`node-${node.id}`]);
+  const nodeImageLoading = useHistorianStore((s) => s.generatingImages[`node-${node.id}`]);
+  const nodeMap = useHistorianStore((s) => s.generatedImages[`map-${node.id}`]);
+  const nodeMapLoading = useHistorianStore((s) => s.generatingImages[`map-${node.id}`]);
+
   // In turbo mode, prefetch both splits for each child that's on the current path
   useEffect(() => {
     if (turboMode && isDeepest && hasChildren) {
@@ -91,25 +99,40 @@ function ExplorationLevel({
 
       {/* Expanded large card for the selected node */}
       {showHeader && (() => {
-        const essayText = useHistorianStore.getState().essays[node.id];
-        const essayIsLoading = useHistorianStore.getState().essayLoading[node.id];
-        const nodeImage = useHistorianStore.getState().generatedImages[`node-${node.id}`];
-        const nodeImageLoading = useHistorianStore.getState().generatingImages[`node-${node.id}`];
         const imageContext = `${node.title}. ${node.timeRange.start} to ${node.timeRange.end}, ${node.geographicScope}. ${node.summary}`;
+        const mapContext = `Historical map showing ${node.geographicScope} during the period ${node.timeRange.start} to ${node.timeRange.end} (${node.title}). Show political boundaries, key cities, trade routes, and territorial control relevant to this era. Cartographic style with muted colors, no modern borders.`;
 
         return (
           <div className="mb-4">
             <div className="bg-white/70 backdrop-blur border-2 border-sepia/20 rounded-2xl overflow-hidden shadow-sm">
-              {/* Large image banner (if available) */}
-              {nodeImage && (
-                <ImagePlaceholder
-                  contextText={imageContext}
-                  cacheKey={`node-${node.id}`}
-                  title={node.title}
-                  timeRange={node.timeRange}
-                  geographicScope={node.geographicScope}
-                  summary={node.summary}
-                />
+              {/* Large image + map banners (if available) */}
+              {(nodeImage || nodeMap) && (
+                <div className={`flex gap-0 ${nodeImage && nodeMap ? "" : ""}`}>
+                  {nodeImage && (
+                    <div className="flex-1">
+                      <ImagePlaceholder
+                        contextText={imageContext}
+                        cacheKey={`node-${node.id}`}
+                        title={node.title}
+                        timeRange={node.timeRange}
+                        geographicScope={node.geographicScope}
+                        summary={node.summary}
+                      />
+                    </div>
+                  )}
+                  {nodeMap && (
+                    <div className="flex-1">
+                      <ImagePlaceholder
+                        contextText={mapContext}
+                        cacheKey={`map-${node.id}`}
+                        title={`Map: ${node.title}`}
+                        timeRange={node.timeRange}
+                        geographicScope={node.geographicScope}
+                        summary={`Historical map of ${node.geographicScope}`}
+                      />
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="p-6">
@@ -154,28 +177,35 @@ function ExplorationLevel({
                   </div>
                 )}
 
-                {/* 2x2 action button grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3 border-t border-sepia/10">
+                {/* Action button grid */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-4 pt-3 border-t border-sepia/10">
                   <button
                     onClick={() => onSplitTime(node)}
                     disabled={isLoading}
                     className="px-3 py-2 text-xs font-serif bg-navy text-white rounded-lg hover:bg-navy/80 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
-                    ⏳ Split by Time
+                    ⏳ Time
                   </button>
                   <button
                     onClick={() => onSplitGeo(node)}
                     disabled={isLoading}
                     className="px-3 py-2 text-xs font-serif bg-crimson text-white rounded-lg hover:bg-crimson/80 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
-                    🗺️ Split by Geo
+                    🗺️ Geo
                   </button>
                   <button
                     onClick={() => generateImage(`node-${node.id}`, imageContext)}
                     disabled={isLoading || nodeImageLoading || !!nodeImage}
                     className="px-3 py-2 text-xs font-serif bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
-                    {nodeImageLoading ? "🎨 Generating..." : nodeImage ? "🎨 Image Ready" : "🎨 Generate Image"}
+                    {nodeImageLoading ? "🎨 ..." : nodeImage ? "🎨 Done" : "🎨 Image"}
+                  </button>
+                  <button
+                    onClick={() => generateImage(`map-${node.id}`, mapContext)}
+                    disabled={isLoading || nodeMapLoading || !!nodeMap}
+                    className="px-3 py-2 text-xs font-serif bg-teal-700 text-white rounded-lg hover:bg-teal-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+                  >
+                    {nodeMapLoading ? "🗺️ ..." : nodeMap ? "🗺️ Done" : "🗺️ Map"}
                   </button>
                   {!essayText && !essayIsLoading ? (
                     <button
@@ -286,13 +316,31 @@ export default function Explorer() {
     setLoading,
     setChildren,
     navigateTo,
-    addDebugEntry,
     findNode,
     turboMode,
     toggleTurbo,
+    showDebug,
+    debugPanelHeight,
   } = useHistorianStore();
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Abort controller for direct (non-prefetch) API calls — replaced on each navigation
+  const directCallController = useRef<AbortController | null>(null);
+
+  // Cancel any in-flight direct calls
+  const cancelDirectCalls = useCallback(() => {
+    if (directCallController.current) {
+      directCallController.current.abort();
+      directCallController.current = null;
+    }
+  }, []);
+
+  // Get a fresh signal for a new direct call
+  const newDirectSignal = useCallback(() => {
+    cancelDirectCalls();
+    directCallController.current = new AbortController();
+    return directCallController.current.signal;
+  }, [cancelDirectCalls]);
 
   // Auto-split root on first load using pre-generated data
   useEffect(() => {
@@ -340,18 +388,20 @@ export default function Explorer() {
       }
 
       setLoading(true);
+      const signal = newDirectSignal();
+      const store = useHistorianStore.getState();
+      const debugId = store.startDebugEntry({ action: "split-time", model: store.selectedModel, prompt: `Split by time: ${node.title}`, nodeTitle: node.title, nodeDepth: node.depth });
       try {
         const res = await fetch("/api/explore", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "split-time", node: slimNode(node), model: useHistorianStore.getState().selectedModel, language: useHistorianStore.getState().selectedLanguage }),
+          body: JSON.stringify({ action: "split-time", node: slimNode(node), model: store.selectedModel, language: store.selectedLanguage }),
+          signal,
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        if (data._debug) {
-          addDebugEntry({ action: "split-time", model: data._debug.model, prompt: data._debug.prompt, response: data });
-        }
+        useHistorianStore.getState().completeDebugEntry(debugId, data);
 
         const children: HistoryNode[] = data.phases.map(
           (phase: { title: string; start: string; end: string; summary: string }) => ({
@@ -371,12 +421,17 @@ export default function Explorer() {
         useHistorianStore.getState().setLastSplitAxis("time");
         navigateTo(node.id);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          useHistorianStore.getState().completeDebugEntry(debugId, {}, "Cancelled — user navigated away");
+          return;
+        }
         console.error("Split by time failed:", err);
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
     },
-    [setLoading, setChildren, navigateTo, addDebugEntry, turboMode]
+    [setLoading, setChildren, navigateTo, turboMode, newDirectSignal]
   );
 
   const handleSplitGeo = useCallback(
@@ -386,7 +441,6 @@ export default function Explorer() {
         return;
       }
 
-      // In turbo mode: cancel all prefetches and use cached result if available
       if (turboMode) {
         cancelPrefetches(new Set([node.id]));
         const prefetched = useHistorianStore.getState().prefetchedSplits[node.id];
@@ -399,18 +453,20 @@ export default function Explorer() {
       }
 
       setLoading(true);
+      const signal = newDirectSignal();
+      const store = useHistorianStore.getState();
+      const debugId = store.startDebugEntry({ action: "split-geography", model: store.selectedModel, prompt: `Split by geo: ${node.title}`, nodeTitle: node.title, nodeDepth: node.depth });
       try {
         const res = await fetch("/api/explore", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "split-geography", node: slimNode(node), model: useHistorianStore.getState().selectedModel, language: useHistorianStore.getState().selectedLanguage }),
+          body: JSON.stringify({ action: "split-geography", node: slimNode(node), model: store.selectedModel, language: store.selectedLanguage }),
+          signal,
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        if (data._debug) {
-          addDebugEntry({ action: "split-geography", model: data._debug.model, prompt: data._debug.prompt, response: data });
-        }
+        useHistorianStore.getState().completeDebugEntry(debugId, data);
 
         const children: HistoryNode[] = data.regions.map(
           (region: { regionName: string; summary: string }) => ({
@@ -430,18 +486,24 @@ export default function Explorer() {
         useHistorianStore.getState().setLastSplitAxis("geography");
         navigateTo(node.id);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          useHistorianStore.getState().completeDebugEntry(debugId, {}, "Cancelled — user navigated away");
+          return;
+        }
         console.error("Split by geo failed:", err);
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
     },
-    [setLoading, setChildren, navigateTo, addDebugEntry, turboMode]
+    [setLoading, setChildren, navigateTo, turboMode, newDirectSignal]
   );
 
   const handleSelectChild = useCallback(
     (childNode: HistoryNode) => {
-      // Cancel stale prefetches — keep only the selected child's prefetches
+      // Cancel ALL in-flight work — both prefetches and direct API calls
       cancelPrefetches(new Set([childNode.id]));
+      cancelDirectCalls();
 
       // If this child is from a prefetched result (not yet in the tree),
       // we need to commit the prefetched split to the tree first
@@ -463,14 +525,15 @@ export default function Explorer() {
       }
       navigateTo(childNode.id);
     },
-    [navigateTo, findNode, setChildren]
+    [navigateTo, findNode, setChildren, cancelDirectCalls]
   );
 
   const handleEssay = useCallback(
     async (node: HistoryNode) => {
       const store = useHistorianStore.getState();
-      if (store.essays[node.id] || store.essayLoading[node.id]) return; // already done or loading
+      if (store.essays[node.id] || store.essayLoading[node.id]) return;
       store.setEssayLoading(node.id, true);
+      const debugId = store.startDebugEntry({ action: "essay", model: store.selectedModel, prompt: `Essay: ${node.title}`, nodeTitle: node.title, nodeDepth: node.depth });
       try {
         const res = await fetch("/api/explore", {
           method: "POST",
@@ -480,19 +543,17 @@ export default function Explorer() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        if (data._debug) {
-          addDebugEntry({ action: "essay", model: data._debug.model, prompt: data._debug.prompt, response: data });
-        }
-
+        useHistorianStore.getState().completeDebugEntry(debugId, data);
         useHistorianStore.getState().setEssay(node.id, data.essay);
       } catch (err) {
         console.error("Essay generation failed:", err);
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, err instanceof Error ? err.message : "Unknown error");
         useHistorianStore.getState().setEssay(node.id, "Failed to generate essay. Please try again.");
       } finally {
         useHistorianStore.getState().setEssayLoading(node.id, false);
       }
     },
-    [addDebugEntry]
+    []
   );
 
   // Build the vertical thread: walk the currentPath and resolve each node
@@ -505,7 +566,10 @@ export default function Explorer() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-parchment via-parchment to-amber-50/50">
+    <div
+      className="min-h-screen bg-gradient-to-b from-parchment via-parchment to-amber-50/50"
+      style={{ paddingBottom: showDebug ? debugPanelHeight + 40 : 0 }}
+    >
       {/* Header */}
       <header className="sticky top-0 z-40 bg-parchment/90 backdrop-blur-md border-b border-sepia/10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">

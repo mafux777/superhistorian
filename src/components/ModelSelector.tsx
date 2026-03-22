@@ -80,33 +80,55 @@ export default function ModelSelector() {
               {error}
             </div>
           )}
-          {models.map((model) => (
-            <button
-              key={model.id}
-              onClick={() => {
-                setSelectedModel(model.id);
-                setIsOpen(false);
-              }}
-              className={`w-full text-left px-4 py-3 hover:bg-sepia/5 transition-colors border-b border-sepia/5 last:border-0 ${
-                model.id === selectedModel ? "bg-sepia/10" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-serif text-sm text-ink font-medium truncate">
-                  {model.name}
-                </span>
-                {model.id === selectedModel && (
-                  <span className="text-xs text-navy">✓</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3 mt-1 text-[11px] text-sepia/60 font-mono">
-                <span>{(model.contextLength / 1024).toFixed(0)}K ctx</span>
-                <span>${parseFloat(model.promptPrice) * 1e6}/M in</span>
-                <span>${parseFloat(model.completionPrice) * 1e6}/M out</span>
-                <span>{new Date(model.created * 1000).toLocaleDateString()}</span>
-              </div>
-            </button>
-          ))}
+          {(() => {
+            // Find max completion price across all models for the bar scale
+            const maxPrice = Math.max(...models.map((m) => parseFloat(m.completionPrice) * 1e6), 0.01);
+
+            return models.map((model) => {
+              const outPrice = parseFloat(model.completionPrice) * 1e6;
+              const inPrice = parseFloat(model.promptPrice) * 1e6;
+              const barWidth = Math.max(2, (outPrice / maxPrice) * 100);
+
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => {
+                    setSelectedModel(model.id);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 hover:bg-sepia/5 transition-colors border-b border-sepia/5 last:border-0 ${
+                    model.id === selectedModel ? "bg-sepia/10" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-serif text-sm text-ink font-medium truncate">
+                      {model.name}
+                    </span>
+                    {model.id === selectedModel && (
+                      <span className="text-xs text-navy">✓</span>
+                    )}
+                  </div>
+                  {/* Price bar */}
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-3 bg-sepia/5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-400 to-amber-400 rounded-full"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-sepia/50 shrink-0 w-16 text-right">
+                      ${outPrice < 1 ? outPrice.toFixed(2) : outPrice.toFixed(1)}/M
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-[10px] text-sepia/40 font-mono">
+                    <span>{(model.contextLength / 1024).toFixed(0)}K ctx</span>
+                    <span>${inPrice < 1 ? inPrice.toFixed(2) : inPrice.toFixed(1)}/M in</span>
+                    <span>{new Date(model.created * 1000).toLocaleDateString()}</span>
+                  </div>
+                </button>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

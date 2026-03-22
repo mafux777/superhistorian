@@ -47,7 +47,11 @@ export interface DebugEntry {
   action: string;
   model: string;
   prompt: string;
-  response: Record<string, unknown>;
+  nodeTitle: string; // title of the card being worked on
+  nodeDepth: number; // depth level in the tree (0 = root)
+  response: Record<string, unknown> | null; // null = still in-flight
+  completedAt: number | null; // null = still in-flight
+  error: string | null;
 }
 
 export type ExploreRequest = {

@@ -15,6 +15,30 @@ interface ImagePlaceholderProps {
   summary?: string;
 }
 
+// Client-side timeout must match server-side (90s)
+const IMAGE_TIMEOUT_MS = 90_000;
+
+// Concurrency limit for image generation (separate from text prefetch queue)
+const MAX_IMAGE_CONCURRENT = 2;
+let imageActiveCount = 0;
+const imageQueue: (() => void)[] = [];
+
+function enqueueImage(fn: () => Promise<void>) {
+  const run = () => {
+    imageActiveCount++;
+    fn().finally(() => {
+      imageActiveCount--;
+      const next = imageQueue.shift();
+      if (next) next();
+    });
+  };
+  if (imageActiveCount < MAX_IMAGE_CONCURRENT) {
+    run();
+  } else {
+    imageQueue.push(run);
+  }
+}
+
 // Fire-and-forget image generation that writes results to the store
 export function generateImage(cacheKey: string, contextText: string) {
   const store = useHistorianStore.getState();
@@ -23,34 +47,45 @@ export function generateImage(cacheKey: string, contextText: string) {
   if (store.generatingImages[cacheKey] || store.generatedImages[cacheKey]) return;
 
   store.setGeneratingImage(cacheKey, true);
+  const debugId = store.startDebugEntry({
+    action: "generate-image",
+    model: store.selectedImageModel,
+    prompt: contextText.slice(0, 100),
+    nodeTitle: contextText.split(".")[0] || cacheKey,
+    nodeDepth: -1,
+  });
 
-  fetch("/api/generate-image", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      context: contextText,
-      model: store.selectedImageModel,
-    }),
-  })
-    .then((res) => res.json())
-    .then((data) => {
-      if (data._debug) {
-        useHistorianStore.getState().addDebugEntry({
-          action: "generate-image",
-          model: data._debug.model,
-          prompt: data._debug.prompt,
-          response: data,
-        });
-      }
+  enqueueImage(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
+
+    try {
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context: contextText,
+          model: useHistorianStore.getState().selectedImageModel,
+          nodeId: cacheKey.replace(/^node-/, ""),
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      const data = await res.json();
+      useHistorianStore.getState().completeDebugEntry(debugId, data);
       if (data.error) throw new Error(data.error);
       useHistorianStore.getState().setGeneratedImage(cacheKey, data.imageUrl);
-    })
-    .catch((err) => {
-      useHistorianStore.getState().setImageError(
-        cacheKey,
-        err instanceof Error ? err.message : "Failed to generate image"
-      );
-    });
+    } catch (err) {
+      clearTimeout(timer);
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      const errMsg = isTimeout
+        ? `Image timeout: no response within ${IMAGE_TIMEOUT_MS / 1000}s`
+        : err instanceof Error ? err.message : "Failed to generate image";
+      useHistorianStore.getState().completeDebugEntry(debugId, {}, errMsg);
+      useHistorianStore.getState().setImageError(cacheKey, errMsg);
+    }
+  });
 }
 
 export default function ImagePlaceholder({ contextText, cacheKey, compact, title, timeRange, geographicScope, summary }: ImagePlaceholderProps) {

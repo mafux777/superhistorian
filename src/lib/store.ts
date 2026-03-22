@@ -31,6 +31,7 @@ interface HistorianState {
   // Debug log
   debugLog: DebugEntry[];
   showDebug: boolean;
+  debugPanelHeight: number;
   // Generated images cache & state
   generatedImages: Record<string, string>; // key → data URL or base64
   generatingImages: Record<string, boolean>; // key → currently generating
@@ -57,8 +58,11 @@ interface HistorianState {
   setPrefetchedSplit: (nodeId: string, axis: "time" | "geo", nodes: HistoryNode[]) => void;
   setPrefetching: (nodeId: string, axis: "time" | "geo", loading: boolean) => void;
   setCancelled: (nodeIds: string[]) => void;
-  addDebugEntry: (entry: Omit<DebugEntry, "id" | "timestamp">) => void;
+  addDebugEntry: (entry: Omit<DebugEntry, "id" | "timestamp" | "completedAt" | "error"> & { response: Record<string, unknown> | null }) => string;
+  startDebugEntry: (entry: { action: string; model: string; prompt: string; nodeTitle?: string; nodeDepth?: number }) => string;
+  completeDebugEntry: (id: string, response: Record<string, unknown>, error?: string) => void;
   toggleDebug: () => void;
+  setDebugPanelHeight: (height: number) => void;
   findNode: (nodeId: string) => HistoryNode | null;
 }
 
@@ -120,6 +124,7 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
   cancelledNodes: {},
   debugLog: [],
   showDebug: false,
+  debugPanelHeight: 320,
   generatedImages: {},
   generatingImages: {},
   imageErrors: {},
@@ -227,14 +232,34 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
       for (const id of nodeIds) updated[id] = true;
       return { cancelledNodes: updated };
     }),
-  addDebugEntry: (entry) =>
+  addDebugEntry: (entry) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     set((state) => ({
       debugLog: [
-        { ...entry, id: String(Date.now()), timestamp: Date.now() },
+        { ...entry, id, timestamp: Date.now(), completedAt: entry.response ? Date.now() : null, error: null, nodeTitle: entry.nodeTitle || "", nodeDepth: entry.nodeDepth ?? -1 },
         ...state.debugLog,
       ].slice(0, 50),
+    }));
+    return id;
+  },
+  startDebugEntry: (entry) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    set((state) => ({
+      debugLog: [
+        { ...entry, id, timestamp: Date.now(), response: null, completedAt: null, error: null, nodeTitle: entry.nodeTitle || "", nodeDepth: entry.nodeDepth ?? -1 },
+        ...state.debugLog,
+      ].slice(0, 50),
+    }));
+    return id;
+  },
+  completeDebugEntry: (id, response, error) =>
+    set((state) => ({
+      debugLog: state.debugLog.map((e) =>
+        e.id === id ? { ...e, response, completedAt: Date.now(), error: error || null } : e
+      ),
     })),
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
+  setDebugPanelHeight: (debugPanelHeight) => set({ debugPanelHeight }),
 
   findNode: (nodeId) => {
     return findNodeInTree(get().tree, nodeId);

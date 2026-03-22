@@ -8,25 +8,25 @@ import { v4 } from "@/lib/uuid";
 export default function SearchBar() {
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const { setTree, addDebugEntry } = useHistorianStore();
+  const { setTree } = useHistorianStore();
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isSearching) return;
 
     setIsSearching(true);
+    const store = useHistorianStore.getState();
+    const debugId = store.startDebugEntry({ action: "jump-to-topic", model: store.selectedModel, prompt: `Search: ${query.trim()}`, nodeTitle: query.trim(), nodeDepth: 0 });
     try {
       const res = await fetch("/api/explore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "jump-to-topic", query: query.trim(), model: useHistorianStore.getState().selectedModel, language: useHistorianStore.getState().selectedLanguage }),
+        body: JSON.stringify({ action: "jump-to-topic", query: query.trim(), model: store.selectedModel, language: store.selectedLanguage }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      if (data._debug) {
-        addDebugEntry({ action: "jump-to-topic", model: data._debug.model, prompt: data._debug.prompt, response: data });
-      }
+      useHistorianStore.getState().completeDebugEntry(debugId, data);
 
       // Create a new root node from the search result
       const newRoot: HistoryNode = {
