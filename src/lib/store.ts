@@ -51,6 +51,7 @@ interface HistorianState {
   setSelectedImageModel: (model: string) => void;
   setSelectedLanguage: (lang: string) => void;
   setGeneratedImage: (key: string, url: string) => void;
+  clearGeneratedImage: (key: string) => void;
   setGeneratingImage: (key: string, generating: boolean) => void;
   setImageError: (key: string, error: string | null) => void;
   toggleTurbo: () => void;
@@ -189,6 +190,12 @@ export const useHistorianStore = create<HistorianState>((set, get) => ({
       generatingImages: { ...state.generatingImages, [key]: false },
       imageErrors: { ...state.imageErrors, [key]: undefined as unknown as string },
     })),
+  clearGeneratedImage: (key) =>
+    set((state) => {
+      const generatedImages = { ...state.generatedImages };
+      delete generatedImages[key];
+      return { generatedImages };
+    }),
   setGeneratingImage: (key, generating) =>
     set((state) => ({
       generatingImages: { ...state.generatingImages, [key]: generating },

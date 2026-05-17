@@ -195,17 +195,17 @@ function ExplorationLevel({
                   </button>
                   <button
                     onClick={() => generateImage(`node-${node.id}`, imageContext)}
-                    disabled={isLoading || nodeImageLoading || !!nodeImage}
+                    disabled={isLoading || nodeImageLoading}
                     className="px-3 py-2 text-xs font-serif bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
-                    {nodeImageLoading ? "🎨 ..." : nodeImage ? "🎨 Done" : "🎨 Image"}
+                    {nodeImageLoading ? "🎨 ..." : nodeImage ? "🎨 Redo" : "🎨 Image"}
                   </button>
                   <button
                     onClick={() => generateImage(`map-${node.id}`, mapContext)}
-                    disabled={isLoading || nodeMapLoading || !!nodeMap}
+                    disabled={isLoading || nodeMapLoading}
                     className="px-3 py-2 text-xs font-serif bg-teal-700 text-white rounded-lg hover:bg-teal-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
                   >
-                    {nodeMapLoading ? "🗺️ ..." : nodeMap ? "🗺️ Done" : "🗺️ Map"}
+                    {nodeMapLoading ? "🗺️ ..." : nodeMap ? "🗺️ Redo" : "🗺️ Map"}
                   </button>
                   {!essayText && !essayIsLoading ? (
                     <button

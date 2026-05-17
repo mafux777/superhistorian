@@ -17,6 +17,18 @@ interface OpenRouterModel {
   };
 }
 
+// Preferred text models in display order
+const PREFERRED_TEXT_MODELS = [
+  "google/gemini-3-flash-preview",
+  "deepseek/deepseek-v4-pro",
+  "google/gemini-2.5-flash-lite",
+  "openai/gpt-5.4-mini",
+  "openai/gpt-5-nano",
+  "deepseek/deepseek-v4-flash",
+  "anthropic/claude-sonnet-4.6",
+  "moonshotai/kimi-k2.6",
+];
+
 export async function GET(req: NextRequest) {
   try {
     const res = await fetch("https://openrouter.ai/api/v1/models", {
@@ -39,22 +51,32 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((m) =>
         m.architecture?.output_modalities?.includes("image")
       );
+    } else {
+      // For text models, use the curated list
+      const modelMap = new Map(filtered.map((m) => [m.id, m]));
+      filtered = PREFERRED_TEXT_MODELS
+        .map((id) => modelMap.get(id))
+        .filter((m): m is OpenRouterModel => m !== undefined);
     }
 
-    // Sort by created date descending, take 20 most recent
-    const sorted = filtered
-      .sort((a, b) => b.created - a.created)
-      .slice(0, 20)
-      .map((m) => ({
-        id: m.id,
-        name: m.name,
-        created: m.created,
-        contextLength: m.context_length,
-        promptPrice: m.pricing?.prompt,
-        completionPrice: m.pricing?.completion,
-      }));
+    // Return in preferred order (text) or created-descending (image)
+    const sorted =
+      type === "image"
+        ? filtered
+            .sort((a, b) => b.created - a.created)
+            .slice(0, 20)
+        : filtered;
 
-    return NextResponse.json({ models: sorted });
+    const result = sorted.map((m) => ({
+      id: m.id,
+      name: m.name,
+      created: m.created,
+      contextLength: m.context_length,
+      promptPrice: m.pricing?.prompt,
+      completionPrice: m.pricing?.completion,
+    }));
+
+    return NextResponse.json({ models: result });
   } catch (error) {
     console.error("Models API error:", error);
     return NextResponse.json(

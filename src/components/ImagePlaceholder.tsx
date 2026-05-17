@@ -43,8 +43,8 @@ function enqueueImage(fn: () => Promise<void>) {
 export function generateImage(cacheKey: string, contextText: string) {
   const store = useHistorianStore.getState();
 
-  // Don't start if already generating or already have an image
-  if (store.generatingImages[cacheKey] || store.generatedImages[cacheKey]) return;
+  // Don't start if already generating
+  if (store.generatingImages[cacheKey]) return;
 
   store.setGeneratingImage(cacheKey, true);
   const debugId = store.startDebugEntry({
@@ -92,13 +92,14 @@ export default function ImagePlaceholder({ contextText, cacheKey, compact, title
   const existingImage = useHistorianStore((s) => s.generatedImages[cacheKey]);
   const isGenerating = useHistorianStore((s) => s.generatingImages[cacheKey]);
   const error = useHistorianStore((s) => s.imageErrors[cacheKey]);
+  const clearGeneratedImage = useHistorianStore((s) => s.clearGeneratedImage);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (existingImage) {
     return (
       <>
         <div
-          className={`rounded-xl overflow-hidden border border-sepia/20 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${compact ? "my-4" : "my-3"}`}
+          className={`relative rounded-xl overflow-hidden border border-sepia/20 shadow-sm cursor-pointer hover:shadow-md transition-shadow group ${compact ? "my-4" : "my-3"}`}
           onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
         >
           <img
@@ -106,6 +107,13 @@ export default function ImagePlaceholder({ contextText, cacheKey, compact, title
             alt={title || `Historical illustration: ${contextText.slice(0, 80)}...`}
             className="w-full h-auto"
           />
+          <button
+            onClick={(e) => { e.stopPropagation(); clearGeneratedImage(cacheKey); }}
+            className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full bg-black/50 text-white/80 text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+            title="Remove image"
+          >
+            ×
+          </button>
         </div>
         <ImageLightbox
           imageUrl={lightboxOpen ? existingImage : null}

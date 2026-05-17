@@ -50,6 +50,7 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
   const isGeneratingImage = useHistorianStore((s) => s.generatingImages[`node-${node.id}`]);
   const existingMap = useHistorianStore((s) => s.generatedImages[`map-${node.id}`]);
   const isGeneratingMap = useHistorianStore((s) => s.generatingImages[`map-${node.id}`]);
+  const clearGeneratedImage = useHistorianStore((s) => s.clearGeneratedImage);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [mapLightboxOpen, setMapLightboxOpen] = useState(false);
 
@@ -154,19 +155,37 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
         {(existingImage || existingMap) && (
           <div className="flex gap-2 mb-3">
             {existingImage && (
-              <div
-                className="flex-1 rounded-lg overflow-hidden border border-sepia/15 cursor-zoom-in"
-                onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
-              >
-                <img src={existingImage} alt={node.title} className="w-full h-auto" />
+              <div className="relative flex-1 group/thumb">
+                <div
+                  className="rounded-lg overflow-hidden border border-sepia/15 cursor-zoom-in"
+                  onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
+                >
+                  <img src={existingImage} alt={node.title} className="w-full h-auto" />
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearGeneratedImage(`node-${node.id}`); }}
+                  className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white/80 text-xs opacity-0 group-hover/thumb:opacity-100 transition-opacity hover:bg-black/70"
+                  title="Remove image"
+                >
+                  ×
+                </button>
               </div>
             )}
             {existingMap && (
-              <div
-                className="flex-1 rounded-lg overflow-hidden border border-sepia/15 cursor-zoom-in"
-                onClick={(e) => { e.stopPropagation(); setMapLightboxOpen(true); }}
-              >
-                <img src={existingMap} alt={`Map: ${node.title}`} className="w-full h-auto" />
+              <div className="relative flex-1 group/thumb">
+                <div
+                  className="rounded-lg overflow-hidden border border-sepia/15 cursor-zoom-in"
+                  onClick={(e) => { e.stopPropagation(); setMapLightboxOpen(true); }}
+                >
+                  <img src={existingMap} alt={`Map: ${node.title}`} className="w-full h-auto" />
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearGeneratedImage(`map-${node.id}`); }}
+                  className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white/80 text-xs opacity-0 group-hover/thumb:opacity-100 transition-opacity hover:bg-black/70"
+                  title="Remove map"
+                >
+                  ×
+                </button>
               </div>
             )}
           </div>
@@ -197,17 +216,17 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); generateImage(`node-${node.id}`, imageContext); }}
-            disabled={isLoading || isGeneratingImage || !!existingImage}
+            disabled={isLoading || isGeneratingImage}
             className="px-2 py-1.5 bg-violet-600 text-white text-[11px] font-semibold rounded-lg hover:bg-violet-500 transition-colors disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm"
           >
-            {isGeneratingImage ? "🎨 ..." : existingImage ? "🎨 Done" : "🎨 Image"}
+            {isGeneratingImage ? "🎨 ..." : existingImage ? "🎨 Redo" : "🎨 Image"}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); generateImage(`map-${node.id}`, mapContext); }}
-            disabled={isLoading || isGeneratingMap || !!existingMap}
+            disabled={isLoading || isGeneratingMap}
             className="px-2 py-1.5 bg-teal-700 text-white text-[11px] font-semibold rounded-lg hover:bg-teal-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm"
           >
-            {isGeneratingMap ? "🗺️ ..." : existingMap ? "🗺️ Done" : "🗺️ Map"}
+            {isGeneratingMap ? "🗺️ ..." : existingMap ? "🗺️ Redo" : "🗺️ Map"}
           </button>
         </div>
       </motion.div>
