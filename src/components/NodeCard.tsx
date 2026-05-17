@@ -6,6 +6,7 @@ import { useHistorianStore } from "@/lib/store";
 import { generateImage } from "./ImagePlaceholder";
 import ImageLightbox from "./ImageLightbox";
 import { motion } from "framer-motion";
+import { buildMapContext } from "@/lib/map-context";
 
 interface NodeCardProps {
   node: HistoryNode;
@@ -80,7 +81,7 @@ export default function NodeCard({ node, index, onSplitTime, onSplitGeo, onDrill
   }
 
   const imageContext = `${node.title}. ${node.timeRange.start} to ${node.timeRange.end}, ${node.geographicScope}. ${node.summary}`;
-  const mapContext = `Historical map showing ${node.geographicScope} during the period ${node.timeRange.start} to ${node.timeRange.end} (${node.title}). Show political boundaries, key cities, trade routes, and territorial control relevant to this era. Cartographic style with muted colors, no modern borders.`;
+  const mapContext = buildMapContext(node);
 
   return (
     <>

@@ -15,6 +15,7 @@ import LanguageSelector from "./LanguageSelector";
 import DebugPanel from "./DebugPanel";
 import { initialSplits } from "@/lib/initial-splits";
 import { prefetchForNode, cancelPrefetches } from "@/lib/prefetch";
+import { buildMapContext } from "@/lib/map-context";
 import { motion, AnimatePresence } from "framer-motion";
 
 // A single level in the vertical exploration thread
@@ -100,7 +101,7 @@ function ExplorationLevel({
       {/* Expanded large card for the selected node */}
       {showHeader && (() => {
         const imageContext = `${node.title}. ${node.timeRange.start} to ${node.timeRange.end}, ${node.geographicScope}. ${node.summary}`;
-        const mapContext = `Historical map showing ${node.geographicScope} during the period ${node.timeRange.start} to ${node.timeRange.end} (${node.title}). Show political boundaries, key cities, trade routes, and territorial control relevant to this era. Cartographic style with muted colors, no modern borders.`;
+        const mapContext = buildMapContext(node);
 
         return (
           <div className="mb-4">
