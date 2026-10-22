@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useHistorianStore } from "@/lib/store";
+import { getTotalTokens, isTimeoutMessage, pendoTrack, truncate } from "@/lib/pendo";
 import { motion } from "framer-motion";
 import ImageLightbox from "./ImageLightbox";
 
@@ -46,6 +47,11 @@ export function generateImage(cacheKey: string, contextText: string) {
   // Don't start if already generating
   if (store.generatingImages[cacheKey]) return;
 
+  // Pendo context, captured before this request replaces anything
+  const imageType = cacheKey.startsWith("map-") ? "map" : "illustration";
+  const isRegeneration = Boolean(store.generatedImages[cacheKey]);
+  const node = store.findNode(cacheKey.replace(/^(node|map)-/, ""));
+
   store.setGeneratingImage(cacheKey, true);
   const debugId = store.startDebugEntry({
     action: "generate-image",
@@ -58,6 +64,8 @@ export function generateImage(cacheKey: string, contextText: string) {
   enqueueImage(async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
+    const imageModel = useHistorianStore.getState().selectedImageModel;
+    const startedAt = Date.now();
 
     try {
       const res = await fetch("/api/generate-image", {
@@ -65,7 +73,7 @@ export function generateImage(cacheKey: string, contextText: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           context: contextText,
-          model: useHistorianStore.getState().selectedImageModel,
+          model: imageModel,
           nodeId: cacheKey.replace(/^node-/, ""),
         }),
         signal: controller.signal,
@@ -76,6 +84,16 @@ export function generateImage(cacheKey: string, contextText: string) {
       useHistorianStore.getState().completeDebugEntry(debugId, data);
       if (data.error) throw new Error(data.error);
       useHistorianStore.getState().setGeneratedImage(cacheKey, data.imageUrl);
+      // Pendo: an illustration or map was actually produced (bulk runs fire once per image)
+      pendoTrack("image_generated", {
+        image_type: imageType,
+        image_model: imageModel,
+        // Turbo preview cards aren't in the tree yet; fall back to the debug panel's title
+        node_title: node?.title ?? contextText.split(".")[0],
+        is_regeneration: isRegeneration,
+        duration_ms: Date.now() - startedAt,
+        total_tokens: getTotalTokens(data),
+      });
     } catch (err) {
       clearTimeout(timer);
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
@@ -84,6 +102,15 @@ export function generateImage(cacheKey: string, contextText: string) {
         : err instanceof Error ? err.message : "Failed to generate image";
       useHistorianStore.getState().completeDebugEntry(debugId, {}, errMsg);
       useHistorianStore.getState().setImageError(cacheKey, errMsg);
+      // Pendo: image generation failed, including the 90s client timeout
+      pendoTrack("ai_generation_failed", {
+        generation_type: imageType,
+        model: imageModel,
+        error_message: truncate(errMsg),
+        is_timeout: isTimeout || isTimeoutMessage(errMsg),
+        node_depth: node?.depth,
+        duration_ms: Date.now() - startedAt,
+      });
     }
   });
 }

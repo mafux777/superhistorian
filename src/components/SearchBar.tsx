@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useHistorianStore } from "@/lib/store";
 import { HistoryNode } from "@/lib/types";
 import { v4 } from "@/lib/uuid";
+import { getTotalTokens, isTimeoutMessage, pendoTrack, truncate } from "@/lib/pendo";
 
 export default function SearchBar() {
   const [query, setQuery] = useState("");
@@ -17,6 +18,7 @@ export default function SearchBar() {
     setIsSearching(true);
     const store = useHistorianStore.getState();
     const debugId = store.startDebugEntry({ action: "jump-to-topic", model: store.selectedModel, prompt: `Search: ${query.trim()}`, nodeTitle: query.trim(), nodeDepth: 0 });
+    const startedAt = Date.now();
     try {
       const res = await fetch("/api/explore", {
         method: "POST",
@@ -43,9 +45,31 @@ export default function SearchBar() {
 
       // Replace the tree with this new root
       setTree(newRoot);
+      // Pendo: the search resolved to a topic that is now the exploration root
+      pendoTrack("topic_search_completed", {
+        query: truncate(query),
+        result_title: newRoot.title,
+        result_time_start: newRoot.timeRange.start,
+        result_time_end: newRoot.timeRange.end,
+        result_geographic_scope: newRoot.geographicScope,
+        model: store.selectedModel,
+        language: store.selectedLanguage,
+        duration_ms: Date.now() - startedAt,
+        total_tokens: getTotalTokens(data),
+      });
       setQuery("");
     } catch (err) {
       console.error("Search failed:", err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      // Pendo: the topic search failed
+      pendoTrack("ai_generation_failed", {
+        generation_type: "topic_search",
+        model: store.selectedModel,
+        language: store.selectedLanguage,
+        error_message: truncate(errorMessage),
+        is_timeout: isTimeoutMessage(errorMessage),
+        duration_ms: Date.now() - startedAt,
+      });
     } finally {
       setIsSearching(false);
     }
