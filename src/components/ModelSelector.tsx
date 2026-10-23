@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useHistorianStore } from "@/lib/store";
+import { pendoTrack, pricePerMillion } from "@/lib/pendo";
 
 interface Model {
   id: string;
@@ -93,6 +94,18 @@ export default function ModelSelector() {
                 <button
                   key={model.id}
                   onClick={() => {
+                    if (model.id !== selectedModel) {
+                      // Pendo: the user switched text models (options load at runtime)
+                      pendoTrack("ai_model_changed", {
+                        model_type: "text",
+                        previous_model: selectedModel,
+                        new_model: model.id,
+                        model_name: model.name,
+                        prompt_price: pricePerMillion(model.promptPrice),
+                        completion_price: pricePerMillion(model.completionPrice),
+                        context_length: model.contextLength,
+                      });
+                    }
                     setSelectedModel(model.id);
                     setIsOpen(false);
                   }}

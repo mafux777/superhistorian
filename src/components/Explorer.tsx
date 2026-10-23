@@ -16,6 +16,7 @@ import DebugPanel from "./DebugPanel";
 import { initialSplits } from "@/lib/initial-splits";
 import { prefetchForNode, cancelPrefetches } from "@/lib/prefetch";
 import { buildMapContext } from "@/lib/map-context";
+import { getTotalTokens, isTimeoutMessage, pendoTrack, truncate } from "@/lib/pendo";
 import { motion, AnimatePresence } from "framer-motion";
 
 // A single level in the vertical exploration thread
@@ -383,6 +384,7 @@ export default function Explorer() {
         if (prefetched?.time) {
           setChildren(node.id, prefetched.time, "time");
           useHistorianStore.getState().setLastSplitAxis("time");
+          trackSplitCompleted(node, "time", prefetched.time.length, "prefetch");
           navigateTo(node.id);
           return;
         }
@@ -392,6 +394,7 @@ export default function Explorer() {
       const signal = newDirectSignal();
       const store = useHistorianStore.getState();
       const debugId = store.startDebugEntry({ action: "split-time", model: store.selectedModel, prompt: `Split by time: ${node.title}`, nodeTitle: node.title, nodeDepth: node.depth });
+      const startedAt = Date.now();
       try {
         const res = await fetch("/api/explore", {
           method: "POST",
@@ -420,14 +423,31 @@ export default function Explorer() {
 
         setChildren(node.id, children, "time");
         useHistorianStore.getState().setLastSplitAxis("time");
+        trackSplitCompleted(node, "time", children.length, "llm", {
+          model: store.selectedModel,
+          language: store.selectedLanguage,
+          durationMs: Date.now() - startedAt,
+          totalTokens: getTotalTokens(data),
+        });
         navigateTo(node.id);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           useHistorianStore.getState().completeDebugEntry(debugId, {}, "Cancelled — user navigated away");
           return;
         }
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
         console.error("Split by time failed:", err);
-        useHistorianStore.getState().completeDebugEntry(debugId, {}, err instanceof Error ? err.message : "Unknown error");
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, errorMessage);
+        // Pendo: the split request failed (user cancellations returned above)
+        pendoTrack("ai_generation_failed", {
+          generation_type: "split_time",
+          model: store.selectedModel,
+          language: store.selectedLanguage,
+          error_message: truncate(errorMessage),
+          is_timeout: isTimeoutMessage(errorMessage),
+          node_depth: node.depth,
+          duration_ms: Date.now() - startedAt,
+        });
       } finally {
         setLoading(false);
       }
@@ -448,6 +468,7 @@ export default function Explorer() {
         if (prefetched?.geo) {
           setChildren(node.id, prefetched.geo, "geography");
           useHistorianStore.getState().setLastSplitAxis("geography");
+          trackSplitCompleted(node, "geography", prefetched.geo.length, "prefetch");
           navigateTo(node.id);
           return;
         }
@@ -457,6 +478,7 @@ export default function Explorer() {
       const signal = newDirectSignal();
       const store = useHistorianStore.getState();
       const debugId = store.startDebugEntry({ action: "split-geography", model: store.selectedModel, prompt: `Split by geo: ${node.title}`, nodeTitle: node.title, nodeDepth: node.depth });
+      const startedAt = Date.now();
       try {
         const res = await fetch("/api/explore", {
           method: "POST",
@@ -485,14 +507,31 @@ export default function Explorer() {
 
         setChildren(node.id, children, "geography");
         useHistorianStore.getState().setLastSplitAxis("geography");
+        trackSplitCompleted(node, "geography", children.length, "llm", {
+          model: store.selectedModel,
+          language: store.selectedLanguage,
+          durationMs: Date.now() - startedAt,
+          totalTokens: getTotalTokens(data),
+        });
         navigateTo(node.id);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           useHistorianStore.getState().completeDebugEntry(debugId, {}, "Cancelled — user navigated away");
           return;
         }
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
         console.error("Split by geo failed:", err);
-        useHistorianStore.getState().completeDebugEntry(debugId, {}, err instanceof Error ? err.message : "Unknown error");
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, errorMessage);
+        // Pendo: the split request failed (user cancellations returned above)
+        pendoTrack("ai_generation_failed", {
+          generation_type: "split_geography",
+          model: store.selectedModel,
+          language: store.selectedLanguage,
+          error_message: truncate(errorMessage),
+          is_timeout: isTimeoutMessage(errorMessage),
+          node_depth: node.depth,
+          duration_ms: Date.now() - startedAt,
+        });
       } finally {
         setLoading(false);
       }
@@ -521,6 +560,8 @@ export default function Explorer() {
             setChildren(childNode.parentId, nodes, axis);
             // Remember which axis the user preferred
             useHistorianStore.getState().setLastSplitAxis(axis);
+            const parent = findNode(childNode.parentId);
+            if (parent) trackSplitCompleted(parent, axis, nodes.length, "prefetch_preview");
           }
         }
       }
@@ -535,6 +576,7 @@ export default function Explorer() {
       if (store.essays[node.id] || store.essayLoading[node.id]) return;
       store.setEssayLoading(node.id, true);
       const debugId = store.startDebugEntry({ action: "essay", model: store.selectedModel, prompt: `Essay: ${node.title}`, nodeTitle: node.title, nodeDepth: node.depth });
+      const startedAt = Date.now();
       try {
         const res = await fetch("/api/explore", {
           method: "POST",
@@ -546,10 +588,34 @@ export default function Explorer() {
 
         useHistorianStore.getState().completeDebugEntry(debugId, data);
         useHistorianStore.getState().setEssay(node.id, data.essay);
+        // Pendo: the essay was delivered inline on the card
+        pendoTrack("essay_generated", {
+          node_title: node.title,
+          node_depth: node.depth,
+          geographic_scope: node.geographicScope,
+          time_range_start: node.timeRange.start,
+          time_range_end: node.timeRange.end,
+          model: store.selectedModel,
+          language: store.selectedLanguage,
+          essay_word_count: typeof data.essay === "string" ? data.essay.split(/\s+/).filter(Boolean).length : 0,
+          duration_ms: Date.now() - startedAt,
+          total_tokens: getTotalTokens(data),
+        });
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
         console.error("Essay generation failed:", err);
-        useHistorianStore.getState().completeDebugEntry(debugId, {}, err instanceof Error ? err.message : "Unknown error");
+        useHistorianStore.getState().completeDebugEntry(debugId, {}, errorMessage);
         useHistorianStore.getState().setEssay(node.id, "Failed to generate essay. Please try again.");
+        // Pendo: the essay request failed (the card shows a placeholder instead)
+        pendoTrack("ai_generation_failed", {
+          generation_type: "essay",
+          model: store.selectedModel,
+          language: store.selectedLanguage,
+          error_message: truncate(errorMessage),
+          is_timeout: isTimeoutMessage(errorMessage),
+          node_depth: node.depth,
+          duration_ms: Date.now() - startedAt,
+        });
       } finally {
         useHistorianStore.getState().setEssayLoading(node.id, false);
       }
@@ -693,4 +759,33 @@ export default function Explorer() {
 
 function countNodes(node: HistoryNode): number {
   return 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0);
+}
+
+// Pendo: a split finished and its child cards were added to the tree.
+// `request` details only exist when the split came from a direct LLM call.
+function trackSplitCompleted(
+  node: HistoryNode,
+  splitAxis: "time" | "geography",
+  childCount: number,
+  source: "llm" | "prefetch" | "prefetch_preview",
+  request?: { model: string; language: string; durationMs: number; totalTokens?: number }
+) {
+  const { findNode, selectedModel, selectedLanguage, turboMode } = useHistorianStore.getState();
+  // Turbo preview cards aren't in the tree yet, so splitting one adds no cards
+  if (!findNode(node.id)) return;
+  pendoTrack("history_split_completed", {
+    split_axis: splitAxis,
+    source,
+    node_depth: node.depth,
+    child_count: childCount,
+    node_title: node.title,
+    geographic_scope: node.geographicScope,
+    time_range_start: node.timeRange.start,
+    time_range_end: node.timeRange.end,
+    model: request?.model ?? selectedModel,
+    language: request?.language ?? selectedLanguage,
+    turbo_mode: turboMode,
+    duration_ms: request?.durationMs,
+    total_tokens: request?.totalTokens,
+  });
 }
